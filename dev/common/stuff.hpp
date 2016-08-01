@@ -144,7 +144,7 @@ void do_imitation( size_t total_requests ) {
   so_5::launch( [=]( environment_t & env ) {
     // Сначала отдельной кооперацией запускаем агента-менеджера.
     mbox_t checker_mbox;
-    env.introduce_coop( [&checker_mbox]( coop_t & coop ) {
+    env.introduce_coop( [&]( coop_t & coop ) {
       auto manager = coop.make_agent< manager_type >();
       // mbox агента-менеджера потребуется для формирования потока запросов.
       checker_mbox = manager->so_direct_mbox();
