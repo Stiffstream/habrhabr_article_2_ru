@@ -41,29 +41,39 @@ private :
   const mbox_t reply_to_;
 };
 
-// Агент, который будет играть роль менеджера агентов email_analyzer.
 class analyzer_manager final : public agent_t {
 public :
-  analyzer_manager( context_t ctx ) : agent_t( ctx )
+  analyzer_manager( context_t ctx )
+    : agent_t( ctx )
+    , analyzers_disp_(
+        // Нужен приватный, т.е. видимый только нашему менеджеру
+        // диспетчер, на котором и будут работать агенты-анализаторы.
+        disp::thread_pool::create_private_disp(
+          // Указываем, в рамках какого SObjectizer Environment
+          // будет работать диспетчер. Это нужно для корректного запуска
+          // и останова диспетчера.
+          so_environment(),
+          // Просто захардкодим количество рабочих потоков для диспетчера.
+          // В реальном приложении это количество может быть вычислено
+          // на основании, например, thread::hardware_concurrency() или
+          // взято из конфигурации.
+          16 ) )
   {
-    // Класс объявлен как final, поэтому подписки агента можно сделать
-    // прямо в конструкторе. Если бы final не было, подписки лучше было
-    // бы вынести в метод so_define_agent(), что упростило бы разработку
-    // производных классов.
     so_subscribe_self()
-      // В этом случае тип сообщения, на который идет подписка,
-      // выводится автоматически.
       .event( &analyzer_manager::on_new_check_request );
   }
 
 private :
+  disp::thread_pool::private_dispatcher_handle_t analyzers_disp_;
+
+
   void on_new_check_request( const check_request & msg ) {
-    // Создаем кооперацию с единственным агентом внутри.
-    // Эта кооперация будет дочерней для кооперации с агентом-менеджером.
-    // Т.е. SObjectizer Environment проконтролирует, чтобы кооперация с
-    // агентом-анализатором завершила свою работу перед тем, как
-    // завершит свою работу кооперация с агентом-менеджером.
-    introduce_child_coop( *this, [&]( coop_t & coop ) {
+    introduce_child_coop( *this,
+      // Агент из новой кооперации будет автоматически привязан к приватному
+      // диспетчеру с пулом рабочих потоков (при привязке будут использоваться
+      // параметры по умолчанию).
+      analyzers_disp_->binder( disp::thread_pool::bind_params_t() ),
+      [&]( coop_t & coop ) {
         // В кооперацию будет входить всего один агент.
         coop.make_agent< email_analyzer >( msg.email_file_, msg.reply_to_ );
       } );
@@ -84,9 +94,14 @@ int main() {
       } );
 
       // Следующей кооперацией будет кооперация с агентом-имитатором запросов.
-      env.introduce_coop( [checker_mbox]( coop_t & coop ) {
-        coop.make_agent< requests_initiator >( checker_mbox );
-      } );
+      // Запускаем имитатор запроса на собственной рабочей нити, дабы обработка
+      // его сообщений выполнялась независимо от обработки сообщений
+      // агента-менеджера.
+      env.introduce_coop(
+        disp::one_thread::create_private_disp( env )->binder(),
+        [checker_mbox]( coop_t & coop ) {
+          coop.make_agent< requests_initiator >( checker_mbox );
+        } );
     } );
 
     // SObjectizer запущен и работает на своих рабочих потоках.

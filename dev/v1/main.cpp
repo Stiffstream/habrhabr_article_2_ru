@@ -84,9 +84,14 @@ int main() {
       } );
 
       // Следующей кооперацией будет кооперация с агентом-имитатором запросов.
-      env.introduce_coop( [checker_mbox]( coop_t & coop ) {
-        coop.make_agent< requests_initiator >( checker_mbox );
-      } );
+      // Запускаем имитатор запроса на собственной рабочей нити, дабы обработка
+      // его сообщений выполнялась независимо от обработки сообщений
+      // агента-менеджера.
+      env.introduce_coop(
+        disp::one_thread::create_private_disp( env )->binder(),
+        [checker_mbox]( coop_t & coop ) {
+          coop.make_agent< requests_initiator >( checker_mbox );
+        } );
     } );
 
     // SObjectizer запущен и работает на своих рабочих потоках.
