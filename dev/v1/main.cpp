@@ -74,7 +74,9 @@ int main() {
   try {
     // Запускаем SObjectizer Environment и сразу же указываем,
     // какие действия должны быть выполнены при старте.
-    wrapped_env_t sobj( []( environment_t & env ) {
+    // Завершение работы приложения будет выполнено когда имитатор
+    // получит ответы на все свои запросы.
+    so_5::launch( []( environment_t & env ) {
       // Сначала отдельной кооперацией запускаем агента-менеджера.
       mbox_t checker_mbox;
       env.introduce_coop( [&checker_mbox]( coop_t & coop ) {
@@ -93,10 +95,6 @@ int main() {
           coop.make_agent< requests_initiator >( checker_mbox );
         } );
     } );
-
-    // SObjectizer запущен и работает на своих рабочих потоках.
-    // Даем некоторое время на выполнение его работы и завершает приложение.
-    this_thread::sleep_for( 1min );
   }
   catch( const exception & x ) {
     cerr << "Oops! " << x.what() << endl;

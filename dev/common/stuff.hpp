@@ -103,8 +103,11 @@ public :
   }
 
 private :
+  static constexpr size_t total_requests = 5000;
+
   const mbox_t checker_;
   size_t requests_sent_{ 0 };
+  size_t results_received_{ 0 };
 
   void on_next() {
     // Инициируем запрос на провеку.
@@ -114,12 +117,17 @@ private :
         so_direct_mbox() );
 
     ++requests_sent_;
-    if( requests_sent_ < 5000u )
+    if( requests_sent_ < total_requests )
       send< initiate_next >( *this );
   }
 
   void on_result( const check_result & msg ) {
     cout << msg.email_file_ << " -> " << msg.status_ << endl;
+
+    ++results_received_;
+    if( results_received_ >= total_requests )
+      // Работу всего приложения можно завершать.
+      so_environment().stop();
   }
 };
 
