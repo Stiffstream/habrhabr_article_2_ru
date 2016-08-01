@@ -22,4 +22,5 @@ MxxRu::Cpp::composite_target( MxxRu::BUILD_ROOT ) {
 	end
 
 	required_prj 'v1/prj.rb'
+	required_prj 'v2/prj.rb'
 }
