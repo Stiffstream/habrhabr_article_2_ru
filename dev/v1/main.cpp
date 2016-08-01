@@ -72,29 +72,8 @@ private :
 
 int main() {
   try {
-    // Запускаем SObjectizer Environment и сразу же указываем,
-    // какие действия должны быть выполнены при старте.
-    // Завершение работы приложения будет выполнено когда имитатор
-    // получит ответы на все свои запросы.
-    so_5::launch( []( environment_t & env ) {
-      // Сначала отдельной кооперацией запускаем агента-менеджера.
-      mbox_t checker_mbox;
-      env.introduce_coop( [&checker_mbox]( coop_t & coop ) {
-        auto manager = coop.make_agent< analyzer_manager >();
-        // mbox агента-менеджера потребуется для формирования потока запросов.
-        checker_mbox = manager->so_direct_mbox();
-      } );
-
-      // Следующей кооперацией будет кооперация с агентом-имитатором запросов.
-      // Запускаем имитатор запроса на собственной рабочей нити, дабы обработка
-      // его сообщений выполнялась независимо от обработки сообщений
-      // агента-менеджера.
-      env.introduce_coop(
-        disp::one_thread::create_private_disp( env )->binder(),
-        [checker_mbox]( coop_t & coop ) {
-          coop.make_agent< requests_initiator >( checker_mbox );
-        } );
-    } );
+    do_imitation< analyzer_manager >( 500 );
+    return 0;
   }
   catch( const exception & x ) {
     cerr << "Oops! " << x.what() << endl;

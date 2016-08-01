@@ -89,9 +89,13 @@ class requests_initiator final : public agent_t {
   struct initiate_next : public signal_t {};
 
 public :
-  requests_initiator( context_t ctx, mbox_t checker_mbox )
+  requests_initiator(
+    context_t ctx,
+    mbox_t checker_mbox,
+    size_t total_requests )
     : agent_t( ctx )
     , checker_( move(checker_mbox) )
+    , total_requests_( total_requests )
   {
     so_subscribe_self()
       .event< initiate_next >( &requests_initiator::on_next )
@@ -103,9 +107,9 @@ public :
   }
 
 private :
-  static constexpr size_t total_requests = 5000;
-
   const mbox_t checker_;
+
+  const size_t total_requests_;
   size_t requests_sent_{ 0 };
   size_t results_received_{ 0 };
 
@@ -117,7 +121,7 @@ private :
         so_direct_mbox() );
 
     ++requests_sent_;
-    if( requests_sent_ < total_requests )
+    if( requests_sent_ < total_requests_ )
       send< initiate_next >( *this );
   }
 
@@ -125,9 +129,36 @@ private :
     cout << msg.email_file_ << " -> " << msg.status_ << endl;
 
     ++results_received_;
-    if( results_received_ >= total_requests )
+    if( results_received_ >= total_requests_ )
       // Работу всего приложения можно завершать.
       so_environment().stop();
   }
 };
+
+template< typename manager_type >
+void do_imitation( size_t total_requests ) {
+  // Запускаем SObjectizer Environment и сразу же указываем,
+  // какие действия должны быть выполнены при старте.
+  // Завершение работы приложения будет выполнено когда имитатор
+  // получит ответы на все свои запросы.
+  so_5::launch( [=]( environment_t & env ) {
+    // Сначала отдельной кооперацией запускаем агента-менеджера.
+    mbox_t checker_mbox;
+    env.introduce_coop( [&checker_mbox]( coop_t & coop ) {
+      auto manager = coop.make_agent< manager_type >();
+      // mbox агента-менеджера потребуется для формирования потока запросов.
+      checker_mbox = manager->so_direct_mbox();
+    } );
+
+    // Следующей кооперацией будет кооперация с агентом-имитатором запросов.
+    // Запускаем имитатор запроса на собственной рабочей нити, дабы обработка
+    // его сообщений выполнялась независимо от обработки сообщений
+    // агента-менеджера.
+    env.introduce_coop(
+      disp::one_thread::create_private_disp( env )->binder(),
+      [checker_mbox, total_requests]( coop_t & coop ) {
+        coop.make_agent< requests_initiator >( checker_mbox, total_requests );
+      } );
+  } );
+}
 
