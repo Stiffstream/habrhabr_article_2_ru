@@ -91,7 +91,9 @@ public :
     , analyzers_disp_(
         disp::thread_pool::create_private_disp(
             so_environment(),
-            thread::hardware_concurrency() ) )
+            "analyzers",
+            disp::thread_pool::disp_params_t().thread_count(
+                thread::hardware_concurrency() ) ) )
   {
     so_subscribe_self()
       .event( &analyzer_manager::on_new_check_request )
@@ -184,16 +186,15 @@ private :
 // мониторинга внутренностей SObjectizer Environment.
 class sobj_monitor final : public agent_t {
 public :
-  sobj_monitor( context_t ctx ) : agent_t( ctx ) {
-    so_subscribe( so_environment().stats_controller().mbox() )
+  using agent_t::agent_t;
+
+  virtual void so_evt_start() {
+    auto & controller = so_environment().stats_controller();
+    so_subscribe( controller.mbox() )
       .event( [this]( const stats::messages::quantity< size_t > & msg ) {
         cout << "*** " << msg.m_prefix << msg.m_suffix << " -> "
             << msg.m_value << endl;
       } );
-  }
-
-  virtual void so_evt_start() {
-    auto & controller = so_environment().stats_controller();
     controller.set_distribution_period( 5s );
     controller.turn_on();
   }
@@ -223,7 +224,7 @@ void do_imitation() {
     // его сообщений выполнялась независимо от обработки сообщений
     // агента-менеджера.
     env.introduce_coop(
-      disp::one_thread::create_private_disp( env )->binder(),
+      disp::one_thread::create_private_disp( env, "req_initiator" )->binder(),
       [checker_mbox]( coop_t & coop ) {
         coop.make_agent< requests_initiator >( checker_mbox, 5000 );
       } );
