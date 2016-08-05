@@ -39,36 +39,47 @@ struct load_email_failed
 // сможет работать на дефолтном диспетчере не приостанавливая рабочую
 // нить этого диспетчера.
 //
-// Поскольку имитатор IO-агента оказывается очень простым, то не будем
-// создавать для него отдельный класс агента, а воспользуемся возможностью
-// регистрации т.н. ad-hoc агентов.
+// Так же этот агент имитирует различные нештатные ситуации:
+// - каждый 7-й запрос будет завершаться неудачным результатом
+//   (т.е. отсылкой load_email_failed);
+// - на каждый 15-й запрос ответ не будет отсылаться вовсе.
 //
-// Заодно продемонстрируем еще один способ создания, наполнения и
-// регистрации коопераций, который не использует вспомогательных функций
-// introduce_coop и introduce_child_coop.
-//
+class io_agent final : public agent_t {
+public :
+  io_agent( context_t ctx ) : agent_t( ctx ) {
+    // Для взаимодействия с внешним миром IO-агент будет использовать
+    // именованный mbox.
+    so_subscribe( so_environment().create_mbox( "io_agent" ) )
+      .event( &io_agent::on_request );
+  }
+
+private :
+  // Этот счетчик нужен для определения того, как среагировать
+  // на очередной запрос.
+  int counter_{ 0 };
+
+  void on_request( const load_email_request & msg ) {
+    ++counter_;
+    if( 0 == (counter_ % 15) )
+      {} // Вообще ничего не отсылаем, как будто запрос потерялся
+         // где-то по дороге.
+    else {
+      // Для имитации задержки в выполнении запроса.
+      const auto pause = chrono::milliseconds( msg.email_file_.length() * 10 );
+      if( 0 == (counter_ % 7) )
+        // Пришло время отослать отрицательный результат.
+        send_delayed< load_email_failed >( so_environment(),
+            msg.reply_to_, pause, "IO-operation failed" );
+      else
+        send_delayed< load_email_successed >( so_environment(),
+            msg.reply_to_, pause, string() );
+    }
+  }
+};
+
 void make_io_agent( environment_t & env ) {
-  // IO-агент будет жить в своей собственной кооперации.
-  // Каждая кооперация должна иметь свое уникальное имя, но можно
-  // попросить SObjectizer Environment создать это имя самостоятельно.
-  auto coop = env.create_coop( so_5::autoname );
-
-  // Для взаимодействия с внешним миром IO-агент будет использовать
-  // именованный mbox.
-  auto mbox = env.create_mbox( "io_agent" );
-
-  // Теперь можно создать IO-агента, который принадлежит новой кооперации и
-  // обрабатывает единственное сообщение, приходящее с именованного mbox-а.
-  coop->define_agent().event( mbox, [&env]( const load_email_request & msg ) {
-    // Отсылка ответа с задержкой и будет имитацией асинхронной IO-операции.
-    send_delayed< load_email_successed >(
-        env,
-        msg.reply_to_,
-        chrono::milliseconds( msg.email_file_.length() * 10 ),
-        string() );
+  env.introduce_coop( []( coop_t & coop ) {
+    coop.make_agent< io_agent >();
   } );
-
-  // Осталось зарегистрировать кооперацию с IO-агентом.
-  env.register_coop( move(coop) );
 }
 

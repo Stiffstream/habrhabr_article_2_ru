@@ -26,7 +26,7 @@ public :
     // При старте сразу же отправляем запрос IO-агенту для загрузки
     // содержимого email файла.
     send< load_email_request >(
-        // mbox получателя сообщения будет получен по его имени.
+        // mbox IO-агента будет получен по имени.
         so_environment().create_mbox( "io_agent" ),
         email_file_,
         // Ответ должен прийти на наш собственный mbox.
@@ -89,7 +89,9 @@ public :
   analyzer_manager( context_t ctx )
     : agent_t( ctx )
     , analyzers_disp_(
-        disp::thread_pool::create_private_disp( so_environment(), 16 ) )
+        disp::thread_pool::create_private_disp(
+            so_environment(),
+            thread::hardware_concurrency() ) )
   {
     so_subscribe_self()
       .event( &analyzer_manager::on_new_check_request )
