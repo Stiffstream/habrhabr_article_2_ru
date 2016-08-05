@@ -9,7 +9,7 @@ MxxRu::Cpp::exe_target {
 
   target 'v3_app'
 
-  required_prj 'so_5/prj.rb'
+  required_prj 'so_5/prj_s.rb'
 
   cpp_source 'main.cpp'
 }

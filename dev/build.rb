@@ -8,8 +8,6 @@ MxxRu::Cpp::composite_target( MxxRu::BUILD_ROOT ) {
 
 	if 'gcc' == toolset.name || 'clang' == toolset.name
 		global_linker_option '-pthread'
-		global_linker_option '-static-libstdc++'
-		global_linker_option "-Wl,-rpath='$ORIGIN'"
 	end
 
 	# If there is local options file then use it.
