@@ -50,6 +50,6 @@ mxxruexternals
 cd dev
 ruby build.rb
 ~~~~~
-В результате компиляции в target/release должны оказаться libso-5.5.17.so и приложения v1_app, v2_app и т.д.
+В результате компиляции в target/release должны оказаться libso-5.5.17.1.so и приложения v1_app, v2_app и т.д.
 
-Аналогичные действия нужно предпринимать и под Windows. Под Windows в каталоге target/release окажутся файлы so-5.5.17.dll и приложения v1_app.exe, v2_app.exe и т.д.
+Аналогичные действия нужно предпринимать и под Windows. Под Windows в каталоге target/release окажутся файлы so-5.5.17.1.dll и приложения v1_app.exe, v2_app.exe и т.д.
