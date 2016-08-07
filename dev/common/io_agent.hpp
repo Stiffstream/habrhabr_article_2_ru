@@ -16,7 +16,7 @@ struct load_email_request
 };
 
 // Успешный результат загрузки файла.
-struct load_email_successed
+struct load_email_succeed
 {
   // Содержимое файла.
   string content_;
@@ -71,7 +71,7 @@ private :
         send_delayed< load_email_failed >( so_environment(),
             msg.reply_to_, pause, "IO-operation failed" );
       else
-        send_delayed< load_email_successed >( so_environment(),
+        send_delayed< load_email_succeed >( so_environment(),
             msg.reply_to_, pause, string() );
     }
   }

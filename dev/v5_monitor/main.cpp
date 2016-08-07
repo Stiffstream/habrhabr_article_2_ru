@@ -18,7 +18,7 @@ public :
     // Нам нужно получить два сообщения от IO-агента. Каждое
     // из эти сообщений будет обрабатываться своим событием.
     so_subscribe_self()
-      .event( &email_analyzer::on_load_successed )
+      .event( &email_analyzer::on_load_succeed )
       .event( &email_analyzer::on_load_failed );
   }
 
@@ -37,7 +37,7 @@ private :
   const string email_file_;
   const mbox_t reply_to_;
 
-  void on_load_successed( const load_email_successed & msg ) {
+  void on_load_succeed( const load_email_succeed & msg ) {
     try {
       // Стадии обработки обозначаем лишь схематично.
       auto parsed_data = parse_email( msg.content_ );

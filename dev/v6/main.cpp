@@ -17,7 +17,7 @@ public :
 
   virtual void so_define_agent() override {
     so_subscribe_self()
-      .event( &email_analyzer::on_load_successed )
+      .event( &email_analyzer::on_load_succeed )
       .event( &email_analyzer::on_load_failed )
       // Добавляем еще обработку тайм-аута на ответ IO-агента.
       .event< io_agent_response_timeout >( &email_analyzer::on_io_timeout );
@@ -39,7 +39,7 @@ private :
   const string email_file_;
   const mbox_t reply_to_;
 
-  void on_load_successed( const load_email_successed & msg ) {
+  void on_load_succeed( const load_email_succeed & msg ) {
     try {
       auto parsed_data = parse_email( msg.content_ );
       auto status = check_headers( parsed_data->headers() );
