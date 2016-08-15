@@ -3,9 +3,47 @@
 
 #include <list>
 
+// Имитация агентов-checker-ов конкретных частей сообщения.
+// Поскольку все имитаторы будут одинаковыми, используем шаблон,
+// который будет параметризоваться пустыми типами-тегами.
+struct headers_checker_tag {
+  using data_type = vector< string >;
+};
+struct body_checker_tag {
+  using data_type = string;
+};
+struct attach_checker_tag {
+  using data_type = vector< string >;
+};
+
+template< typename TAG >
+class checker_template : public agent_t {
+public :
+  struct result { check_status status_; };
+
+  checker_template( context_t ctx, mbox_t reply_to, typename TAG::data_type )
+    : agent_t(ctx), reply_to_(move(reply_to) )
+  {}
+
+  virtual void so_evt_start() override {
+    send_delayed< result >(
+        this->so_environment(), reply_to_, 250ms, check_status::safe );
+  }
+
+private :
+  mbox_t reply_to_;
+};
+
+using email_headers_checker = checker_template< headers_checker_tag >;
+using email_body_checker = checker_template< body_checker_tag >;
+using email_attach_checker = checker_template< attach_checker_tag >;
+
 class email_analyzer : public agent_t {
   state_t st_wait_io{ this };
-  state_t st_io_failed{ this };
+  state_t st_io_timedout{ this };
+
+  state_t st_wait_checkers{ this };
+  state_t st_checkers_timedout{ this };
 
 public :
   email_analyzer( context_t ctx,
@@ -19,12 +57,29 @@ public :
       .event( &email_analyzer::on_load_succeed )
       .event( &email_analyzer::on_load_failed )
       // Назначаем тайм-аут для ожидания ответа.
-      .time_limit( 1500ms, st_io_failed );
+      .time_limit( 1500ms, st_io_timedout );
 
-    // Для состояния, означающего сбой IO-операции,
-    // нужен только обработчик входа в состояние.
-    st_io_failed
-      .on_enter( &email_analyzer::on_enter_io_failed );
+    // Для состояния, означающего отсутствие результата
+    // IO-операции нужен только обработчик входа в состояние.
+    st_io_timedout
+      .on_enter( &email_analyzer::on_timeout );
+
+    st_wait_checkers
+      .event( [this]( const email_headers_checker::result & msg ) {
+          on_checker_result( msg.status_ );
+        } )
+      .event( [this]( const email_body_checker::result & msg ) {
+          on_checker_result( msg.status_ );
+        } )
+      .event( [this]( const email_attach_checker::result & msg ) {
+          on_checker_result( msg.status_ );
+        } )
+      .time_limit( 750ms, st_checkers_timedout );
+
+    // Для состояния, означающего отсутствие результатов
+    // checker-ов нужен только обработчик входа в состояние.
+    st_checkers_timedout
+      .on_enter( &email_analyzer::on_timeout );
   }
 
   virtual void so_evt_start() override {
@@ -44,21 +99,27 @@ private :
   const string email_file_;
   const mbox_t reply_to_;
 
+  int checks_passed_{};
+
   void on_load_succeed( const load_email_succeed & msg ) {
+    // Меняем состояние т.к. переходим к следующей операции.
+    st_wait_checkers.activate();
+
     try {
       auto parsed_data = parse_email( msg.content_ );
-      auto status = check_headers( parsed_data->headers() );
-      if( check_status::safe == status )
-        status = check_body( parsed_data->body() );
-      if( check_status::safe == status )
-        status = check_attachments( parsed_data->attachments() );
-      send< check_result >( reply_to_, email_file_, status );
+      introduce_child_coop( *this, [&]( coop_t & coop ) {
+        coop.make_agent< email_headers_checker >(
+            so_direct_mbox(), parsed_data->headers() );
+        coop.make_agent< email_body_checker >(
+            so_direct_mbox(), parsed_data->body() );
+        coop.make_agent< email_attach_checker >(
+            so_direct_mbox(), parsed_data->attachments() );
+      } );
     }
     catch( const exception & ) {
       send< check_result >(
           reply_to_, email_file_, check_status::check_failure );
     }
-    so_deregister_agent_coop_normally();
   }
 
   void on_load_failed( const load_email_failed & ) {
@@ -67,11 +128,26 @@ private :
     so_deregister_agent_coop_normally();
   }
 
-  void on_enter_io_failed() {
-    // Ведем себя точно так же, как и при ошибке ввода-вывода.
+  void on_timeout() {
     send< check_result >(
         reply_to_, email_file_, check_status::check_failure );
     so_deregister_agent_coop_normally();
+  }
+
+  void on_checker_result( check_status status ) {
+    // На первом же неудачном результате прерываем свою работу.
+    if( check_status::safe != status ) {
+      send< check_result >( reply_to_, email_file_, status );
+      so_deregister_agent_coop_normally();
+    }
+
+    ++checks_passed_;
+    if( 3 == checks_passed_ ) {
+      // Все результаты получены. Можно завершать проверку с
+      // положительным результатом.
+      send< check_result >( reply_to_, email_file_, check_status::safe );
+      so_deregister_agent_coop_normally();
+    }
   }
 };
 
