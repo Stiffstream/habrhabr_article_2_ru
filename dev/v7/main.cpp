@@ -40,10 +40,11 @@ using email_attach_checker = checker_template< attach_checker_tag >;
 
 class email_analyzer : public agent_t {
   state_t st_wait_io{ this };
-  state_t st_io_timedout{ this };
-
   state_t st_wait_checkers{ this };
-  state_t st_checkers_timedout{ this };
+
+  state_t st_finishing{ this };
+  state_t st_failure{  initial_substate_of{ st_finishing } };
+  state_t st_successful{ substate_of{ st_finishing } };
 
 public :
   email_analyzer( context_t ctx,
@@ -57,12 +58,7 @@ public :
       .event( &email_analyzer::on_load_succeed )
       .event( &email_analyzer::on_load_failed )
       // Назначаем тайм-аут для ожидания ответа.
-      .time_limit( 1500ms, st_io_timedout );
-
-    // Для состояния, означающего отсутствие результата
-    // IO-операции нужен только обработчик входа в состояние.
-    st_io_timedout
-      .on_enter( &email_analyzer::on_timeout );
+      .time_limit( 1500ms, st_failure );
 
     st_wait_checkers
       .event( [this]( const email_headers_checker::result & msg ) {
@@ -74,12 +70,20 @@ public :
       .event( [this]( const email_attach_checker::result & msg ) {
           on_checker_result( msg.status_ );
         } )
-      .time_limit( 750ms, st_checkers_timedout );
+      // Еще один тайм-аут для ответов.
+      .time_limit( 750ms, st_failure );
 
-    // Для состояния, означающего отсутствие результатов
-    // checker-ов нужен только обработчик входа в состояние.
-    st_checkers_timedout
-      .on_enter( &email_analyzer::on_timeout );
+    // Для состояний, которые отвечают за завершение работы,
+    // нужно определить только обработчики входа.
+    st_finishing.on_enter( [this]{ so_deregister_agent_coop_normally(); } );
+    st_failure.on_enter( [this]{
+        send< check_result >(
+            reply_to_, email_file_, check_status::check_failure );
+      } );
+    st_successful.on_enter( [this]{
+        send< check_result >(
+            reply_to_, email_file_, check_status::safe );
+      } );
   }
 
   virtual void so_evt_start() override {
@@ -117,36 +121,24 @@ private :
       } );
     }
     catch( const exception & ) {
-      send< check_result >(
-          reply_to_, email_file_, check_status::check_failure );
+      st_failure.activate();
     }
   }
 
   void on_load_failed( const load_email_failed & ) {
-    send< check_result >(
-        reply_to_, email_file_, check_status::check_failure );
-    so_deregister_agent_coop_normally();
-  }
-
-  void on_timeout() {
-    send< check_result >(
-        reply_to_, email_file_, check_status::check_failure );
-    so_deregister_agent_coop_normally();
+    st_failure.activate();
   }
 
   void on_checker_result( check_status status ) {
     // На первом же неудачном результате прерываем свою работу.
-    if( check_status::safe != status ) {
-      send< check_result >( reply_to_, email_file_, status );
-      so_deregister_agent_coop_normally();
-    }
-
-    ++checks_passed_;
-    if( 3 == checks_passed_ ) {
-      // Все результаты получены. Можно завершать проверку с
-      // положительным результатом.
-      send< check_result >( reply_to_, email_file_, check_status::safe );
-      so_deregister_agent_coop_normally();
+    if( check_status::safe != status )
+      st_failure.activate();
+    else {
+      ++checks_passed_;
+      if( 3 == checks_passed_ )
+        // Все результаты получены. Можно завершать проверку с
+        // положительным результатом.
+        st_successful.activate();
     }
   }
 };
