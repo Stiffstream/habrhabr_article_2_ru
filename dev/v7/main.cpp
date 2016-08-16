@@ -16,6 +16,11 @@ struct attach_checker_tag {
   using data_type = vector< string >;
 };
 
+unsigned int checker_imit_counter() {
+  static atomic< unsigned int > counter{};
+  return ++counter;
+}
+
 template< typename TAG >
 class checker_template : public agent_t {
 public :
@@ -26,8 +31,23 @@ public :
   {}
 
   virtual void so_evt_start() override {
+    auto i = checker_imit_counter();
+    if( !(i % 17) )
+      // На каждый 17-й вызов вообще ничего не возвращаем.
+      // У email_analyzer-а должен сработать тайм-аут.
+      return;
+
+    // Определяем, какой ответ следует вернуть.
+    check_status status{ check_status::safe };
+    if( !(i % 11) )
+      status = check_status::suspicious;
+    else if( !(i % 19) )
+      status = check_status::dangerous;
+
     send_delayed< result >(
-        this->so_environment(), reply_to_, 250ms, check_status::safe );
+        this->so_environment(), reply_to_,
+        chrono::milliseconds( 50 + (i % 7) * 50 ),
+        status );
   }
 
 private :
