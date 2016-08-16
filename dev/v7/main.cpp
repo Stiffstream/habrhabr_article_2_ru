@@ -5,7 +5,7 @@
 
 // Имитация агентов-checker-ов конкретных частей сообщения.
 // Поскольку все имитаторы будут одинаковыми, используем шаблон,
-// который будет параметризоваться пустыми типами-тегами.
+// который будет параметризоваться типами-тегами.
 struct headers_checker_tag {
   using data_type = vector< string >;
 };
@@ -77,12 +77,10 @@ public :
     // нужно определить только обработчики входа.
     st_finishing.on_enter( [this]{ so_deregister_agent_coop_normally(); } );
     st_failure.on_enter( [this]{
-        send< check_result >(
-            reply_to_, email_file_, check_status::check_failure );
+        send< check_result >( reply_to_, email_file_, status_ );
       } );
     st_successful.on_enter( [this]{
-        send< check_result >(
-            reply_to_, email_file_, check_status::safe );
+        send< check_result >( reply_to_, email_file_, check_status::safe );
       } );
   }
 
@@ -102,6 +100,10 @@ public :
 private :
   const string email_file_;
   const mbox_t reply_to_;
+
+  // Храним последний отрицательный результат для того, чтобы отослать
+  // его при входе в состояние st_failure.
+  check_status status_{ check_status::check_failure };
 
   int checks_passed_{};
 
@@ -131,8 +133,10 @@ private :
 
   void on_checker_result( check_status status ) {
     // На первом же неудачном результате прерываем свою работу.
-    if( check_status::safe != status )
+    if( check_status::safe != status ) {
+      status_ = status;
       st_failure.activate();
+    }
     else {
       ++checks_passed_;
       if( 3 == checks_passed_ )
