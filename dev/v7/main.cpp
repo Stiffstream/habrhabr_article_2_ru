@@ -44,7 +44,7 @@ class email_analyzer : public agent_t {
 
   state_t st_finishing{ this };
   state_t st_failure{  initial_substate_of{ st_finishing } };
-  state_t st_successful{ substate_of{ st_finishing } };
+  state_t st_success{ substate_of{ st_finishing } };
 
 public :
   email_analyzer( context_t ctx,
@@ -79,7 +79,7 @@ public :
     st_failure.on_enter( [this]{
         send< check_result >( reply_to_, email_file_, status_ );
       } );
-    st_successful.on_enter( [this]{
+    st_success.on_enter( [this]{
         send< check_result >( reply_to_, email_file_, check_status::safe );
       } );
   }
@@ -142,7 +142,7 @@ private :
       if( 3 == checks_passed_ )
         // Все результаты получены. Можно завершать проверку с
         // положительным результатом.
-        st_successful.activate();
+        st_success.activate();
     }
   }
 };
