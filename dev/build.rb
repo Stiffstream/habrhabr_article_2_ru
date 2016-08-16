@@ -26,4 +26,5 @@ MxxRu::Cpp::composite_target( MxxRu::BUILD_ROOT ) {
   required_prj 'v5/prj.rb'
   required_prj 'v5_monitor/prj.rb'
   required_prj 'v6/prj.rb'
+  required_prj 'v7/prj.rb'
 }

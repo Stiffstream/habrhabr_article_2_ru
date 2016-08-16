@@ -226,7 +226,7 @@ void do_imitation() {
     env.introduce_coop(
       disp::one_thread::create_private_disp( env, "req_initiator" )->binder(),
       [checker_mbox]( coop_t & coop ) {
-        coop.make_agent< requests_initiator >( checker_mbox, 5000 );
+        coop.make_agent< requests_initiator >( checker_mbox, 5000u );
       } );
   } );
 }
