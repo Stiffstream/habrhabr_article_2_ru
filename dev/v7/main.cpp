@@ -113,14 +113,20 @@ private :
 
     try {
       auto parsed_data = parse_email( msg.content_ );
-      introduce_child_coop( *this, [&]( coop_t & coop ) {
-        coop.make_agent< email_headers_checker >(
-            so_direct_mbox(), parsed_data->headers() );
-        coop.make_agent< email_body_checker >(
-            so_direct_mbox(), parsed_data->body() );
-        coop.make_agent< email_attach_checker >(
-            so_direct_mbox(), parsed_data->attachments() );
-      } );
+      introduce_child_coop( *this,
+        // Агенты-checker-ы будут работать на своем собственном
+        // thread-pool-диспетчере, который был создан заранее
+        // под специальным именем.
+        disp::thread_pool::create_disp_binder(
+            "checkers", disp::thread_pool::bind_params_t{} ),
+        [&]( coop_t & coop ) {
+          coop.make_agent< email_headers_checker >(
+              so_direct_mbox(), parsed_data->headers() );
+          coop.make_agent< email_body_checker >(
+              so_direct_mbox(), parsed_data->body() );
+          coop.make_agent< email_attach_checker >(
+              so_direct_mbox(), parsed_data->attachments() );
+        } );
     }
     catch( const exception & ) {
       st_failure.activate();
@@ -260,7 +266,7 @@ private :
 };
 
 void do_imitation() {
-  so_5::launch( [=]( environment_t & env ) {
+  so_5::launch( []( environment_t & env ) {
     // Запускаем IO-агента, который уже должен работать к моменту,
     // когда появятся первые агенты email_analyzer.
     make_io_agent( env );
@@ -282,6 +288,16 @@ void do_imitation() {
       [checker_mbox]( coop_t & coop ) {
         coop.make_agent< requests_initiator >( checker_mbox, 5000 );
       } );
+  },
+  // Нужно создать диспетчера, на котором будут работать агенты-checker-ы.
+  []( environment_params_t & params ) {
+    params.add_named_dispatcher(
+        // По этому имени затем агенты-checker-ы будут привязываться
+        // к данному диспетчеру.
+        "checkers",
+        // Для демонстрации отводим агентам-checker-ам всего
+        // две рабочие нити.
+        disp::thread_pool::create_disp( 2 ) );
   } );
 }
 
