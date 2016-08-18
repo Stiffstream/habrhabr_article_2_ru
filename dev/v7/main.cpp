@@ -46,7 +46,7 @@ public :
 
     send_delayed< result >(
         this->so_environment(), reply_to_,
-        chrono::milliseconds( 50 + (i % 7) * 50 ),
+        chrono::milliseconds( 50 + (i % 7) * 110 ),
         status );
   }
 
